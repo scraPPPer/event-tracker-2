@@ -8,7 +8,7 @@ import plotly.express as px
 # --- SEITE KONFIGURIEREN ---
 st.set_page_config(page_title="Event-Tracker", layout="centered")
 
-# CSS Fixes für Design und Mobile (Erzwungenes 2er-Layout für Kacheln)
+# CSS Fixes für Kachel-Design und dynamische Farben
 st.markdown("""
     <style>
     h1 { font-size: 1.5rem !important; margin-bottom: 0.5rem; }
@@ -28,8 +28,13 @@ st.markdown("""
         width: 48%;
         text-align: center;
     }
+    /* Status-Farben für die neue Kachel */
+    .bg-green { background-color: #d4edda !important; }
+    .bg-yellow { background-color: #fff3cd !important; }
+    .bg-red { background-color: #f8d7da !important; }
+    
     .metric-label { font-size: 0.8rem; color: #555; margin-bottom: 5px; }
-    .metric-value { font-size: 1.2rem; font-weight: bold; color: #31333F; }
+    .metric-value { font-size: 1.1rem; font-weight: bold; color: #31333F; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -79,7 +84,6 @@ if not df_raw.empty:
     current_year = datetime.date.today().year
 
     st.subheader("Zeitraum wählen")
-    
     if "selected_years" not in st.session_state:
         st.session_state.selected_years = [y for y in all_years if y >= (current_year - 2)] or all_years
 
@@ -107,7 +111,7 @@ if not df_raw.empty:
         df['Monat_Name'] = df['event_date'].dt.month.map(months_de)
         df = df.sort_values(by='event_date')
 
-        # --- A. ANALYSE ---
+        # --- A. ANALYSE & PROGNOSE ---
         st.subheader("Analyse & Prognose")
         total = len(df)
         df['Abstand'] = df['event_date'].diff().dt.days
@@ -115,17 +119,34 @@ if not df_raw.empty:
         if total >= 2:
             avg_val = df['Abstand'].mean()
             avg_days_str = f"{avg_val:.1f}".replace('.', ',') + " Tage"
-            last_date = df['event_date'].iloc[-1].strftime("%d.%m.")
-            next_date = (df['event_date'].iloc[-1] + timedelta(days=avg_val)).strftime("%d.%m.")
             
+            last_date_obj = df['event_date'].iloc[-1]
+            last_date_str = last_date_obj.strftime("%d.%m.")
+            next_date_str = (last_date_obj + timedelta(days=avg_val)).strftime("%d.%m.")
+            
+            # NEU: Abstand zum heutigen Tag berechnen
+            today = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            days_since = (today - last_date_obj).days
+            
+            # Farblogik für die neue Kachel
+            status_class = "bg-green"
+            if days_since > 10:
+                status_class = "bg-red"
+            elif days_since > 5:
+                status_class = "bg-yellow"
+
             st.markdown(f"""
                 <div class="metric-container">
                     <div class="metric-box"><div class="metric-label">Gesamt</div><div class="metric-value">{total}</div></div>
                     <div class="metric-box"><div class="metric-label">Ø Abstand</div><div class="metric-value">{avg_days_str}</div></div>
                 </div>
                 <div class="metric-container">
-                    <div class="metric-box"><div class="metric-label">Zuletzt</div><div class="metric-value">{last_date}</div></div>
-                    <div class="metric-box"><div class="metric-label">Nächste ca.</div><div class="metric-value">{next_date}</div></div>
+                    <div class="metric-box"><div class="metric-label">Zuletzt</div><div class="metric-value">{last_date_str}</div></div>
+                    <div class="metric-box {status_class}"><div class="metric-label">Seit letztem Mal</div><div class="metric-value">{days_since} Tage</div></div>
+                </div>
+                <div class="metric-container">
+                    <div class="metric-box"><div class="metric-label">Nächste ca.</div><div class="metric-value">{next_date_str}</div></div>
+                    <div class="metric-box"><div class="metric-label">Status</div><div class="metric-value">Aktiv</div></div>
                 </div>
             """, unsafe_allow_html=True)
         else:
@@ -170,33 +191,25 @@ if not df_raw.empty:
         wd_counts.columns = ['Wochentag', 'Anzahl']
         st.plotly_chart(create_bar_chart(wd_counts, 'Wochentag', 'Anzahl'), use_container_width=True, config={'displayModeBar': False})
 
-        # --- C. HEATMAP (KORRIGIERTE FARBEN) ---
         st.markdown("### Heatmap (Muster)")
         heatmap_data = pd.crosstab(df['Wochentag'], df['Monat_Name'], margins=True, margins_name='Gesamt')
-        
         m_order = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
         w_order_total = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So', 'Gesamt']
         m_order_total = m_order + ['Gesamt']
-        
         e_w = [t for t in w_order_total if t in heatmap_data.index]
         e_m = [m for m in m_order_total if m in heatmap_data.columns]
         
         if e_w and e_m:
             h_disp = heatmap_data.reindex(index=e_w, columns=e_m).fillna(0)
-            
-            # Subsets definieren
             inner_rows = [r for r in e_w if r != 'Gesamt']
             inner_cols = [c for c in e_m if c != 'Gesamt']
-            
-            # Styling anwenden
             styled_df = h_disp.style.background_gradient(
                 cmap="Reds", subset=(inner_rows, inner_cols)
             ).background_gradient(
-                cmap="Greys", subset=(['Gesamt'], inner_cols), axis=1 # Horizontaler Verlauf für die Zeile
+                cmap="Greys", subset=(['Gesamt'], inner_cols), axis=1
             ).background_gradient(
-                cmap="Greys", subset=(inner_rows, ['Gesamt']), axis=0 # Vertikaler Verlauf für die Spalte
+                cmap="Greys", subset=(inner_rows, ['Gesamt']), axis=0
             ).format("{:.0f}")
-
             st.dataframe(styled_df, use_container_width=True)
 
         with st.expander("Alle Einträge"):
