@@ -8,7 +8,7 @@ import plotly.express as px
 # --- SEITE KONFIGURIEREN ---
 st.set_page_config(page_title="Event-Tracker", layout="centered")
 
-# CSS Fixes
+# CSS Fixes für Design und Mobile (Erzwungenes 2er-Layout für Kacheln)
 st.markdown("""
     <style>
     h1 { font-size: 1.5rem !important; margin-bottom: 0.5rem; }
@@ -107,7 +107,7 @@ if not df_raw.empty:
         df['Monat_Name'] = df['event_date'].dt.month.map(months_de)
         df = df.sort_values(by='event_date')
 
-        # --- A. ANALYSE ---
+        # --- A. ANALYSE (KOMMA FIX) ---
         st.subheader("Analyse & Prognose")
         total = len(df)
         df['Abstand'] = df['event_date'].diff().dt.days
@@ -170,16 +170,12 @@ if not df_raw.empty:
         wd_counts.columns = ['Wochentag', 'Anzahl']
         st.plotly_chart(create_bar_chart(wd_counts, 'Wochentag', 'Anzahl'), use_container_width=True, config={'displayModeBar': False})
 
-        # --- C. HEATMAP (MIT SUMMEN) ---
+        # --- C. HEATMAP (GETRENNTE FARBEN) ---
         st.markdown("### Heatmap (Muster)")
-        
-        # Margins hinzufügen
         heatmap_data = pd.crosstab(df['Wochentag'], df['Monat_Name'], margins=True, margins_name='Gesamt')
         
         m_order = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
-        
-        # Sortierlisten um 'Gesamt' ergänzen
-        w_order_total = w_order + ['Gesamt']
+        w_order_total = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So', 'Gesamt']
         m_order_total = m_order + ['Gesamt']
         
         e_w = [t for t in w_order_total if t in heatmap_data.index]
@@ -187,12 +183,18 @@ if not df_raw.empty:
         
         if e_w and e_m:
             h_disp = heatmap_data.reindex(index=e_w, columns=e_m).fillna(0)
+            inner_idx = [i for i in e_w if i != 'Gesamt']
+            inner_cols = [c for c in e_m if c != 'Gesamt']
             
-            # Styling: Gradient nur auf die Daten (ohne die Gesamt-Spalte/Zeile zu dominieren)
-            st.dataframe(
-                h_disp.style.background_gradient(cmap="Reds", axis=None).format("{:.0f}"),
-                use_container_width=True
-            )
+            styled_df = h_disp.style.background_gradient(
+                cmap="Reds", subset=(inner_idx, inner_cols)
+            ).background_gradient(
+                cmap="Greys", subset=(['Gesamt'], inner_cols)
+            ).background_gradient(
+                cmap="Greys", subset=(inner_idx, ['Gesamt'])
+            ).format("{:.0f}")
+
+            st.dataframe(styled_df, use_container_width=True)
 
         with st.expander("Alle Einträge"):
             st.dataframe(df[['event_date', 'event_name', 'notes']].sort_values(by='event_date', ascending=False), use_container_width=True)
