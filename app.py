@@ -65,4 +65,18 @@ if not df_raw.empty:
     # --- JAHRES-FILTER ---
     all_years = sorted(df_raw['Jahr'].unique().tolist())
     current_year = datetime.date.today().year
-    default_years = [y for y in all_years if y >= (current_year
+    default_years = [y for y in all_years if y >= (current_year - 2)]
+    if not default_years: default_years = all_years
+
+    st.subheader("Zeitraum wählen")
+    selected_years = st.multiselect("Jahre auswählen:", options=all_years, default=default_years)
+
+    if not selected_years:
+        st.warning("Bitte wähle mindestens ein Jahr aus.")
+        df = pd.DataFrame()
+    else:
+        df = df_raw[df_raw['Jahr'].isin(selected_years)].copy()
+    
+    if not df.empty:
+        days_de = {'Monday': 'Mo', 'Tuesday': 'Di', 'Wednesday': 'Mi', 'Thursday': 'Do', 'Friday': 'Fr', 'Saturday': 'Sa', 'Sunday': 'So'}
+        months_de = {1: 'Jan', 2: 'Feb', 3: 'Mär', 4: 'Apr', 5: 'Mai', 6: 'Jun', 7: 'Jul', 8: 'Aug', 9: 'Sep', 10:
