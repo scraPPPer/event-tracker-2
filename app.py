@@ -107,7 +107,7 @@ if not df_raw.empty:
         df['Monat_Name'] = df['event_date'].dt.month.map(months_de)
         df = df.sort_values(by='event_date')
 
-        # --- A. ANALYSE (KOMMA FIX) ---
+        # --- A. ANALYSE ---
         st.subheader("Analyse & Prognose")
         total = len(df)
         df['Abstand'] = df['event_date'].diff().dt.days
@@ -170,7 +170,7 @@ if not df_raw.empty:
         wd_counts.columns = ['Wochentag', 'Anzahl']
         st.plotly_chart(create_bar_chart(wd_counts, 'Wochentag', 'Anzahl'), use_container_width=True, config={'displayModeBar': False})
 
-        # --- C. HEATMAP (GETRENNTE FARBEN) ---
+        # --- C. HEATMAP (KORRIGIERTE FARBEN) ---
         st.markdown("### Heatmap (Muster)")
         heatmap_data = pd.crosstab(df['Wochentag'], df['Monat_Name'], margins=True, margins_name='Gesamt')
         
@@ -183,15 +183,18 @@ if not df_raw.empty:
         
         if e_w and e_m:
             h_disp = heatmap_data.reindex(index=e_w, columns=e_m).fillna(0)
-            inner_idx = [i for i in e_w if i != 'Gesamt']
+            
+            # Subsets definieren
+            inner_rows = [r for r in e_w if r != 'Gesamt']
             inner_cols = [c for c in e_m if c != 'Gesamt']
             
+            # Styling anwenden
             styled_df = h_disp.style.background_gradient(
-                cmap="Reds", subset=(inner_idx, inner_cols)
+                cmap="Reds", subset=(inner_rows, inner_cols)
             ).background_gradient(
-                cmap="Greys", subset=(['Gesamt'], inner_cols)
+                cmap="Greys", subset=(['Gesamt'], inner_cols), axis=1 # Horizontaler Verlauf für die Zeile
             ).background_gradient(
-                cmap="Greys", subset=(inner_idx, ['Gesamt'])
+                cmap="Greys", subset=(inner_rows, ['Gesamt']), axis=0 # Vertikaler Verlauf für die Spalte
             ).format("{:.0f}")
 
             st.dataframe(styled_df, use_container_width=True)
