@@ -8,25 +8,29 @@ import plotly.express as px
 # --- SEITE KONFIGURIEREN ---
 st.set_page_config(page_title="Event-Tracker", layout="centered")
 
-# CSS Fixes für ERZWUNGENE NEBENEINANDER-ANZEIGE (Metric-Spalten)
+# CSS Fixes für Design und Mobile
 st.markdown("""
     <style>
     h1 { font-size: 1.5rem !important; margin-bottom: 0.5rem; }
     h2 { font-size: 1.2rem !important; margin-top: 1rem; }
     h3 { font-size: 1.0rem !important; color: #666; }
-    [data-testid="stMetricValue"] { font-size: 1.2rem !important; }
     
-    /* Dieser Teil erzwingt, dass Spalten auf Mobile nebeneinander bleiben */
-    [data-testid="column"] {
-        width: 48% !important;
-        flex: 1 1 45% !important;
-        min-width: 45% !important;
+    /* Eigener Style für die Metric-Boxen im HTML */
+    .metric-container {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        gap: 10px;
     }
-    [data-testid="stHorizontalBlock"] {
-        flex-direction: row !important;
-        display: flex !important;
-        flex-wrap: wrap !important;
+    .metric-box {
+        background-color: #f0f2f6;
+        padding: 10px;
+        border-radius: 10px;
+        width: 48%;
+        text-align: center;
     }
+    .metric-label { font-size: 0.8rem; color: #555; margin-bottom: 5px; }
+    .metric-value { font-size: 1.2rem; font-weight: bold; color: #31333F; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -100,31 +104,34 @@ if not df_raw.empty:
     if not df.empty:
         days_de = {'Monday': 'Mo', 'Tuesday': 'Di', 'Wednesday': 'Mi', 'Thursday': 'Do', 'Friday': 'Fr', 'Saturday': 'Sa', 'Sunday': 'So'}
         months_de = {1:'Jan', 2:'Feb', 3:'Mär', 4:'Apr', 5:'Mai', 6: 'Jun', 7:'Jul', 8:'Aug', 9:'Sep', 10:'Okt', 11:'Nov', 12:'Dez'}
-        
         df['Wochentag'] = df['event_date'].dt.day_name().map(days_de)
         df['Monat_Name'] = df['event_date'].dt.month.map(months_de)
         df = df.sort_values(by='event_date')
 
-        # --- A. ANALYSE (Erzwungenes 2er Layout) ---
+        # --- A. ANALYSE (ERZWUNGENES LAYOUT ÜBER HTML) ---
         st.subheader("Analyse & Prognose")
         
-        row1_col1, row1_col2 = st.columns(2)
-        row1_col1.metric("Gesamt", len(df))
-        
+        total = len(df)
         df['Abstand'] = df['event_date'].diff().dt.days
         
-        if len(df) >= 2:
-            avg_days = df['Abstand'].mean()
-            last_date = df['event_date'].iloc[-1]
-            next_date = last_date + timedelta(days=avg_days)
+        if total >= 2:
+            avg_days = f"{df['Abstand'].mean():.1f} d"
+            last_date = df['event_date'].iloc[-1].strftime("%d.%m.")
+            next_date = (df['event_date'].iloc[-1] + timedelta(days=df['Abstand'].mean())).strftime("%d.%m.")
             
-            row1_col2.metric("Ø Abstand", f"{avg_days:.1f} d")
-            
-            row2_col1, row2_col2 = st.columns(2)
-            row2_col1.metric("Zuletzt", last_date.strftime("%d.%m."))
-            row2_col2.metric("Nächste ca.", next_date.strftime("%d.%m."))
+            # Hier erzwingen wir das 2x2 Gitter mit HTML
+            st.markdown(f"""
+                <div class="metric-container">
+                    <div class="metric-box"><div class="metric-label">Gesamt</div><div class="metric-value">{total}</div></div>
+                    <div class="metric-box"><div class="metric-label">Ø Abstand</div><div class="metric-value">{avg_days}</div></div>
+                </div>
+                <div class="metric-container">
+                    <div class="metric-box"><div class="metric-label">Zuletzt</div><div class="metric-value">{last_date}</div></div>
+                    <div class="metric-box"><div class="metric-label">Nächste ca.</div><div class="metric-value">{next_date}</div></div>
+                </div>
+            """, unsafe_allow_html=True)
         else:
-            row1_col2.info("Ab 2 Einträgen")
+            st.info("Ab 2 Einträgen verfügbar.")
 
         # --- B. DIAGRAMME ---
         st.divider()
