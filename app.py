@@ -121,4 +121,47 @@ if not df_raw.empty:
             fig.update_layout(
                 xaxis_title="", yaxis_title="", 
                 yaxis=dict(range=[0, y_range], showgrid=False, showticklabels=False),
-                xaxis=dict(type='category' if is_year_
+                xaxis=dict(type='category' if is_year_axis else None, showgrid=False),
+                margin=dict(l=10, r=10, t=30, b=10),
+                height=300,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)'
+            )
+            return fig
+
+        # 1. Häufigkeit nach Jahr
+        st.markdown("### Häufigkeit nach Jahr")
+        y_counts = df['Jahr'].value_counts().sort_index().reset_index()
+        y_counts.columns = ['Jahr', 'Anzahl']
+        st.plotly_chart(create_bar_chart(y_counts, 'Jahr', 'Anzahl', is_year_axis=True), use_container_width=True, config={'displayModeBar': False})
+
+        # 2. Durchschnittlicher Abstand nach Jahr
+        st.markdown("### Ø Abstand nach Jahr (Tage)")
+        yearly_avg = df.groupby('Jahr')['Abstand'].mean().reset_index()
+        yearly_avg.columns = ['Jahr', 'Abstand']
+        yearly_avg['Abstand'] = yearly_avg['Abstand'].round(1)
+        if not yearly_avg['Abstand'].dropna().empty:
+            st.plotly_chart(create_bar_chart(yearly_avg, 'Jahr', 'Abstand', is_year_axis=True), use_container_width=True, config={'displayModeBar': False})
+
+        # 3. Häufigkeit nach Wochentag
+        st.markdown("### Häufigkeit nach Wochentag")
+        w_order = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+        wd_counts = df['Wochentag'].value_counts().reindex(w_order).fillna(0).reset_index()
+        wd_counts.columns = ['Wochentag', 'Anzahl']
+        st.plotly_chart(create_bar_chart(wd_counts, 'Wochentag', 'Anzahl'), use_container_width=True, config={'displayModeBar': False})
+
+        # --- C. HEATMAP ---
+        st.markdown("### Heatmap (Muster)")
+        heatmap_data = pd.crosstab(df['Wochentag'], df['Monat_Name'])
+        m_order = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
+        e_w = [t for t in w_order if t in heatmap_data.index]
+        e_m = [m for m in m_order if m in heatmap_data.columns]
+        if e_w and e_m:
+            h_disp = heatmap_data.reindex(index=e_w, columns=e_m).fillna(0)
+            st.dataframe(h_disp.style.background_gradient(cmap="Reds", axis=None).format("{:.0f}"), use_container_width=True)
+
+        with st.expander("Alle Einträge"):
+            st.dataframe(df[['event_date', 'event_name', 'notes']].sort_values(by='event_date', ascending=False), use_container_width=True)
+
+else:
+    st.info("Noch keine Daten vorhanden.")
