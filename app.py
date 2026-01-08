@@ -134,4 +134,17 @@ if not df_raw.empty:
         # --- C. HEATMAP ---
         st.markdown("### Heatmap (Muster)")
         heatmap_data = pd.crosstab(df['Wochentag'], df['Monat_Name'])
-        m_order = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'De
+        m_order = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
+        e_w = [t for t in w_order if t in heatmap_data.index]
+        e_m = [m for m in m_order if m in heatmap_data.columns]
+        
+        if e_w and e_m:
+            h_disp = heatmap_data.reindex(index=e_w, columns=e_m).fillna(0)
+            st.dataframe(h_disp.style.background_gradient(cmap="Reds", axis=None).format("{:.0f}"), use_container_width=True)
+
+        # --- D. DATEN-TABELLE ---
+        with st.expander("Alle Einträge"):
+            st.dataframe(df[['event_date', 'event_name', 'notes']].sort_values(by='event_date', ascending=False), use_container_width=True)
+
+else:
+    st.info("Noch keine Daten vorhanden.")
