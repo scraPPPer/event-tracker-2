@@ -8,7 +8,7 @@ import plotly.express as px
 # --- SEITE KONFIGURIEREN ---
 st.set_page_config(page_title="Event-Tracker", layout="centered")
 
-# CSS Fixes für Kachel-Design
+# CSS Fixes
 st.markdown("""
     <style>
     h1 { font-size: 1.5rem !important; margin-bottom: 0.5rem; }
@@ -107,17 +107,14 @@ if not df_raw.empty:
         df['Monat_Name'] = df['event_date'].dt.month.map(months_de)
         df = df.sort_values(by='event_date')
 
-        # --- A. ANALYSE (KOMMA FIX) ---
+        # --- A. ANALYSE ---
         st.subheader("Analyse & Prognose")
-        
         total = len(df)
         df['Abstand'] = df['event_date'].diff().dt.days
         
         if total >= 2:
-            # Formatierung mit Komma für die Kachel
             avg_val = df['Abstand'].mean()
             avg_days_str = f"{avg_val:.1f}".replace('.', ',') + " Tage"
-            
             last_date = df['event_date'].iloc[-1].strftime("%d.%m.")
             next_date = (df['event_date'].iloc[-1] + timedelta(days=avg_val)).strftime("%d.%m.")
             
@@ -139,12 +136,10 @@ if not df_raw.empty:
         warm_gray = "#8C837E"
 
         def create_bar_chart(data, x_col, y_col, is_year_axis=False, is_distance=False):
-            # Für das Abstands-Diagramm die Labels auf Komma umstellen
             if is_distance:
                 data['label'] = data[y_col].apply(lambda x: f"{x:.1f}".replace('.', ','))
             else:
                 data['label'] = data[y_col].astype(str)
-
             fig = px.bar(data, x=x_col, y=y_col, text='label')
             max_val = data[y_col].max() if not data.empty else 10
             y_range = max_val * 1.3
@@ -175,14 +170,29 @@ if not df_raw.empty:
         wd_counts.columns = ['Wochentag', 'Anzahl']
         st.plotly_chart(create_bar_chart(wd_counts, 'Wochentag', 'Anzahl'), use_container_width=True, config={'displayModeBar': False})
 
+        # --- C. HEATMAP (MIT SUMMEN) ---
         st.markdown("### Heatmap (Muster)")
-        heatmap_data = pd.crosstab(df['Wochentag'], df['Monat_Name'])
+        
+        # Margins hinzufügen
+        heatmap_data = pd.crosstab(df['Wochentag'], df['Monat_Name'], margins=True, margins_name='Gesamt')
+        
         m_order = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
-        e_w = [t for t in w_order if t in heatmap_data.index]
-        e_m = [m for m in m_order if m in heatmap_data.columns]
+        
+        # Sortierlisten um 'Gesamt' ergänzen
+        w_order_total = w_order + ['Gesamt']
+        m_order_total = m_order + ['Gesamt']
+        
+        e_w = [t for t in w_order_total if t in heatmap_data.index]
+        e_m = [m for m in m_order_total if m in heatmap_data.columns]
+        
         if e_w and e_m:
             h_disp = heatmap_data.reindex(index=e_w, columns=e_m).fillna(0)
-            st.dataframe(h_disp.style.background_gradient(cmap="Reds", axis=None).format("{:.0f}"), use_container_width=True)
+            
+            # Styling: Gradient nur auf die Daten (ohne die Gesamt-Spalte/Zeile zu dominieren)
+            st.dataframe(
+                h_disp.style.background_gradient(cmap="Reds", axis=None).format("{:.0f}"),
+                use_container_width=True
+            )
 
         with st.expander("Alle Einträge"):
             st.dataframe(df[['event_date', 'event_name', 'notes']].sort_values(by='event_date', ascending=False), use_container_width=True)
