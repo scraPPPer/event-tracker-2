@@ -8,14 +8,13 @@ import plotly.express as px
 # --- SEITE KONFIGURIEREN ---
 st.set_page_config(page_title="Event-Tracker", layout="centered")
 
-# CSS Fixes für Design und Mobile
+# CSS Fixes für Kachel-Design
 st.markdown("""
     <style>
     h1 { font-size: 1.5rem !important; margin-bottom: 0.5rem; }
     h2 { font-size: 1.2rem !important; margin-top: 1rem; }
     h3 { font-size: 1.0rem !important; color: #666; }
     
-    /* Eigener Style für die Metric-Boxen im HTML */
     .metric-container {
         display: flex;
         justify-content: space-between;
@@ -108,22 +107,24 @@ if not df_raw.empty:
         df['Monat_Name'] = df['event_date'].dt.month.map(months_de)
         df = df.sort_values(by='event_date')
 
-        # --- A. ANALYSE (ERZWUNGENES LAYOUT ÜBER HTML) ---
+        # --- A. ANALYSE (KOMMA FIX) ---
         st.subheader("Analyse & Prognose")
         
         total = len(df)
         df['Abstand'] = df['event_date'].diff().dt.days
         
         if total >= 2:
-            avg_days = f"{df['Abstand'].mean():.1f} d"
-            last_date = df['event_date'].iloc[-1].strftime("%d.%m.")
-            next_date = (df['event_date'].iloc[-1] + timedelta(days=df['Abstand'].mean())).strftime("%d.%m.")
+            # Formatierung mit Komma für die Kachel
+            avg_val = df['Abstand'].mean()
+            avg_days_str = f"{avg_val:.1f}".replace('.', ',') + " Tage"
             
-            # Hier erzwingen wir das 2x2 Gitter mit HTML
+            last_date = df['event_date'].iloc[-1].strftime("%d.%m.")
+            next_date = (df['event_date'].iloc[-1] + timedelta(days=avg_val)).strftime("%d.%m.")
+            
             st.markdown(f"""
                 <div class="metric-container">
                     <div class="metric-box"><div class="metric-label">Gesamt</div><div class="metric-value">{total}</div></div>
-                    <div class="metric-box"><div class="metric-label">Ø Abstand</div><div class="metric-value">{avg_days}</div></div>
+                    <div class="metric-box"><div class="metric-label">Ø Abstand</div><div class="metric-value">{avg_days_str}</div></div>
                 </div>
                 <div class="metric-container">
                     <div class="metric-box"><div class="metric-label">Zuletzt</div><div class="metric-value">{last_date}</div></div>
@@ -137,8 +138,14 @@ if not df_raw.empty:
         st.divider()
         warm_gray = "#8C837E"
 
-        def create_bar_chart(data, x_col, y_col, is_year_axis=False):
-            fig = px.bar(data, x=x_col, y=y_col, text=y_col)
+        def create_bar_chart(data, x_col, y_col, is_year_axis=False, is_distance=False):
+            # Für das Abstands-Diagramm die Labels auf Komma umstellen
+            if is_distance:
+                data['label'] = data[y_col].apply(lambda x: f"{x:.1f}".replace('.', ','))
+            else:
+                data['label'] = data[y_col].astype(str)
+
+            fig = px.bar(data, x=x_col, y=y_col, text='label')
             max_val = data[y_col].max() if not data.empty else 10
             y_range = max_val * 1.3
             fig.update_traces(marker_color=warm_gray, textposition='outside', textfont_size=11)
@@ -159,9 +166,8 @@ if not df_raw.empty:
         st.markdown("### Ø Abstand nach Jahr (Tage)")
         yearly_avg = df.groupby('Jahr')['Abstand'].mean().reset_index()
         yearly_avg.columns = ['Jahr', 'Abstand']
-        yearly_avg['Abstand'] = yearly_avg['Abstand'].round(1)
         if not yearly_avg['Abstand'].dropna().empty:
-            st.plotly_chart(create_bar_chart(yearly_avg, 'Jahr', 'Abstand', True), use_container_width=True, config={'displayModeBar': False})
+            st.plotly_chart(create_bar_chart(yearly_avg, 'Jahr', 'Abstand', True, is_distance=True), use_container_width=True, config={'displayModeBar': False})
 
         st.markdown("### Häufigkeit nach Wochentag")
         w_order = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
