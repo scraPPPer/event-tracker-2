@@ -3,18 +3,18 @@ import pandas as pd
 from supabase import create_client
 import datetime
 from datetime import timedelta
+import plotly.express as px  # Neu für die Labels
 
 # --- SEITE KONFIGURIEREN ---
 st.set_page_config(page_title="Event-Tracker", layout="centered")
 
-# CSS Fixes für Design und Mobile
+# CSS Fixes
 st.markdown("""
     <style>
     h1 { font-size: 1.5rem !important; margin-bottom: 0.5rem; }
     h2 { font-size: 1.2rem !important; margin-top: 1rem; }
     h3 { font-size: 1.0rem !important; color: #666; }
     [data-testid="stMetricValue"] { font-size: 1.4rem !important; }
-    .stMultiSelect { margin-bottom: 2rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -55,19 +55,16 @@ with st.expander("Neues Ereignis eintragen"):
 
 st.divider()
 
-# 2. DATEN ABFRAGEN
 df_raw = run_query()
 
 if not df_raw.empty:
     df_raw['event_date'] = pd.to_datetime(df_raw['event_date'])
     df_raw['Jahr'] = df_raw['event_date'].dt.year
     
-    # --- JAHRES-FILTER ---
     all_years = sorted(df_raw['Jahr'].unique().tolist())
     current_year = datetime.date.today().year
     default_years = [y for y in all_years if y >= (current_year - 2)]
-    if not default_years: 
-        default_years = all_years
+    if not default_years: default_years = all_years
 
     st.subheader("Zeitraum wählen")
     selected_years = st.multiselect("Jahre auswählen:", options=all_years, default=default_years)
@@ -79,20 +76,17 @@ if not df_raw.empty:
         df = df_raw[df_raw['Jahr'].isin(selected_years)].copy()
     
     if not df.empty:
-        # Deutsche Mappings
         days_de = {'Monday': 'Mo', 'Tuesday': 'Di', 'Wednesday': 'Mi', 'Thursday': 'Do', 'Friday': 'Fr', 'Saturday': 'Sa', 'Sunday': 'So'}
-        months_de = {1:'Jan', 2:'Feb', 3:'Mär', 4:'Apr', 5:'Mai', 6:'Jun', 7:'Jul', 8:'Aug', 9:'Sep', 10:'Okt', 11:'Nov', 12:'Dez'}
+        months_de = {1:'Jan', 2:'Feb', 3:'Mär', 4:'Apr', 5:'Mai', 6: 'Jun', 7:'Jul', 8:'Aug', 9:'Sep', 10:'Okt', 11:'Nov', 12:'Dez'}
         
         df['Wochentag'] = df['event_date'].dt.day_name().map(days_de)
         df['Monat_Name'] = df['event_date'].dt.month.map(months_de)
         df = df.sort_values(by='event_date')
 
-        # --- A. ANALYSE & PROGNOSE ---
+        # --- A. ANALYSE ---
         st.subheader("Analyse & Prognose")
         m1, m2 = st.columns(2)
         m1.metric("Gesamt", len(df))
-        
-        # Berechnung der Abstände
         df['Abstand'] = df['event_date'].diff().dt.days
         
         if len(df) >= 2:
@@ -100,36 +94,49 @@ if not df_raw.empty:
             last_date = df['event_date'].iloc[-1]
             next_date = last_date + timedelta(days=avg_days)
             m2.metric("Ø Abstand", f"{avg_days:.1f} d")
-            
             m3, m4 = st.columns(2)
             m3.metric("Zuletzt am", last_date.strftime("%d.%m."))
             m4.metric("Nächste ca.", next_date.strftime("%d.%m."))
         else:
             m2.info("Ab 2 Einträgen")
 
-        # --- B. DIAGRAMME ---
+        # --- B. DIAGRAMME MIT LABELS ---
         st.divider()
         warm_gray = "#8C837E"
+
+        # Hilfsfunktion für Plotly-Charts
+        def create_bar_chart(data, x_col, y_col, title):
+            fig = px.bar(data, x=x_col, y=y_col, text=y_col, title=title)
+            fig.update_traces(marker_color=warm_gray, textposition='outside')
+            fig.update_layout(
+                xaxis_title="", yaxis_title="", 
+                margin=dict(l=20, r=20, t=40, b=20),
+                height=300,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)'
+            )
+            return fig
 
         # 1. Häufigkeit nach Jahr
         st.markdown("### Häufigkeit nach Jahr")
         y_counts = df['Jahr'].value_counts().sort_index().reset_index()
         y_counts.columns = ['Jahr', 'Anzahl']
-        st.bar_chart(y_counts.set_index('Jahr'), color=warm_gray)
+        st.plotly_chart(create_bar_chart(y_counts, 'Jahr', 'Anzahl', ""), use_container_width=True, config={'displayModeBar': False})
 
         # 2. Durchschnittlicher Abstand nach Jahr
         st.markdown("### Ø Abstand nach Jahr (Tage)")
         yearly_avg = df.groupby('Jahr')['Abstand'].mean().reset_index()
         yearly_avg.columns = ['Jahr', 'Abstand']
+        yearly_avg['Abstand'] = yearly_avg['Abstand'].round(1)
         if not yearly_avg['Abstand'].dropna().empty:
-            st.bar_chart(yearly_avg.set_index('Jahr'), color=warm_gray)
+            st.plotly_chart(create_bar_chart(yearly_avg, 'Jahr', 'Abstand', ""), use_container_width=True, config={'displayModeBar': False})
 
         # 3. Häufigkeit nach Wochentag
         st.markdown("### Häufigkeit nach Wochentag")
         w_order = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
         wd_counts = df['Wochentag'].value_counts().reindex(w_order).fillna(0).reset_index()
         wd_counts.columns = ['Wochentag', 'Anzahl']
-        st.bar_chart(wd_counts.set_index('Wochentag'), color=warm_gray)
+        st.plotly_chart(create_bar_chart(wd_counts, 'Wochentag', 'Anzahl', ""), use_container_width=True, config={'displayModeBar': False})
 
         # --- C. HEATMAP ---
         st.markdown("### Heatmap (Muster)")
@@ -137,12 +144,10 @@ if not df_raw.empty:
         m_order = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
         e_w = [t for t in w_order if t in heatmap_data.index]
         e_m = [m for m in m_order if m in heatmap_data.columns]
-        
         if e_w and e_m:
             h_disp = heatmap_data.reindex(index=e_w, columns=e_m).fillna(0)
             st.dataframe(h_disp.style.background_gradient(cmap="Reds", axis=None).format("{:.0f}"), use_container_width=True)
 
-        # --- D. DATEN-TABELLE ---
         with st.expander("Alle Einträge"):
             st.dataframe(df[['event_date', 'event_name', 'notes']].sort_values(by='event_date', ascending=False), use_container_width=True)
 
