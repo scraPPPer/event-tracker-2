@@ -28,7 +28,7 @@ st.markdown("""
         width: 48%;
         text-align: center;
     }
-    /* Status-Farben für die neue Kachel */
+    /* Status-Farben */
     .bg-green { background-color: #d4edda !important; }
     .bg-yellow { background-color: #fff3cd !important; }
     .bg-red { background-color: #f8d7da !important; }
@@ -122,18 +122,25 @@ if not df_raw.empty:
             
             last_date_obj = df['event_date'].iloc[-1]
             last_date_str = last_date_obj.strftime("%d.%m.")
-            next_date_str = (last_date_obj + timedelta(days=avg_val)).strftime("%d.%m.")
             
-            # NEU: Abstand zum heutigen Tag berechnen
-            today = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            days_since = (today - last_date_obj).days
+            next_date_obj = last_date_obj + timedelta(days=avg_val)
+            next_date_str = next_date_obj.strftime("%d.%m.")
             
-            # Farblogik für die neue Kachel
+            # Abstand zum heutigen Tag berechnen (nur Datum ohne Zeit)
+            today = datetime.datetime.now().date()
+            last_date_only = last_date_obj.date()
+            days_since = (today - last_date_only).days
+            
+            # Farblogik für "Seit letztem Mal"
             status_class = "bg-green"
-            if days_since > 10:
-                status_class = "bg-red"
-            elif days_since > 5:
-                status_class = "bg-yellow"
+            if days_since > 10: status_class = "bg-red"
+            elif days_since > 5: status_class = "bg-yellow"
+
+            # Logik für die "Tendenz" Kachel (Präzise Version)
+            if days_since > avg_val:
+                tendenz = "Überfällig"
+            else:
+                tendenz = "Im Zeitplan"
 
             st.markdown(f"""
                 <div class="metric-container">
@@ -146,7 +153,7 @@ if not df_raw.empty:
                 </div>
                 <div class="metric-container">
                     <div class="metric-box"><div class="metric-label">Nächste ca.</div><div class="metric-value">{next_date_str}</div></div>
-                    <div class="metric-box"><div class="metric-label">Status</div><div class="metric-value">Aktiv</div></div>
+                    <div class="metric-box"><div class="metric-label">Tendenz</div><div class="metric-value">{tendenz}</div></div>
                 </div>
             """, unsafe_allow_html=True)
         else:
@@ -196,13 +203,11 @@ if not df_raw.empty:
         m_order = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
         w_order_total = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So', 'Gesamt']
         m_order_total = m_order + ['Gesamt']
-        e_w = [t for t in w_order_total if t in heatmap_data.index]
-        e_m = [m for m in m_order_total if m in heatmap_data.columns]
         
-        if e_w and e_m:
-            h_disp = heatmap_data.reindex(index=e_w, columns=e_m).fillna(0)
-            inner_rows = [r for r in e_w if r != 'Gesamt']
-            inner_cols = [c for c in e_m if c != 'Gesamt']
+        if all(t in heatmap_data.index for t in w_order_total) and all(m in heatmap_data.columns for m in m_order_total):
+            h_disp = heatmap_data.reindex(index=w_order_total, columns=m_order_total).fillna(0)
+            inner_rows = w_order
+            inner_cols = m_order
             styled_df = h_disp.style.background_gradient(
                 cmap="Reds", subset=(inner_rows, inner_cols)
             ).background_gradient(
