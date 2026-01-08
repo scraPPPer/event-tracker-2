@@ -8,16 +8,25 @@ import plotly.express as px
 # --- SEITE KONFIGURIEREN ---
 st.set_page_config(page_title="Event-Tracker", layout="centered")
 
-# CSS Fixes
+# CSS Fixes für ERZWUNGENE NEBENEINANDER-ANZEIGE (Metric-Spalten)
 st.markdown("""
     <style>
     h1 { font-size: 1.5rem !important; margin-bottom: 0.5rem; }
     h2 { font-size: 1.2rem !important; margin-top: 1rem; }
     h3 { font-size: 1.0rem !important; color: #666; }
-    [data-testid="stMetricValue"] { font-size: 1.4rem !important; }
-    .stMultiSelect { margin-bottom: 0.5rem !important; }
-    /* Buttons kompakter machen */
-    .stButton button { margin-bottom: 0px !important; }
+    [data-testid="stMetricValue"] { font-size: 1.2rem !important; }
+    
+    /* Dieser Teil erzwingt, dass Spalten auf Mobile nebeneinander bleiben */
+    [data-testid="column"] {
+        width: 48% !important;
+        flex: 1 1 45% !important;
+        min-width: 45% !important;
+    }
+    [data-testid="stHorizontalBlock"] {
+        flex-direction: row !important;
+        display: flex !important;
+        flex-wrap: wrap !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -68,38 +77,27 @@ if not df_raw.empty:
 
     st.subheader("Zeitraum wählen")
     
-    # 1. Session State für die Auswahl initialisieren
     if "selected_years" not in st.session_state:
         st.session_state.selected_years = [y for y in all_years if y >= (current_year - 2)] or all_years
 
-    # 2. Buttons für Schnellauswahl
-    col1, col2 = st.columns(2)
-    
-    if col1.button("Alle Jahre", use_container_width=True):
+    col_btn1, col_btn2 = st.columns(2)
+    if col_btn1.button("Alle Jahre", use_container_width=True):
         st.session_state.selected_years = all_years
         st.rerun()
-
-    if col2.button("Letzte 3 Jahre", use_container_width=True):
-        # Berechnet die letzten 3 Jahre inkl. dem aktuellen (z.B. 2024, 2025, 2026)
+    if col_btn2.button("Letzte 3 J.", use_container_width=True):
         three_year_range = [current_year, current_year - 1, current_year - 2]
         st.session_state.selected_years = [y for y in all_years if y in three_year_range]
         st.rerun()
 
-    # 3. Das Multiselect-Feld (verknüpft mit dem State)
-    selected_years = st.multiselect(
-        "Jahre manuell anpassen:", 
-        options=all_years, 
-        key="selected_years"
-    )
+    selected_years = st.multiselect("Jahre anpassen:", options=all_years, key="selected_years")
 
     if not selected_years:
-        st.warning("Bitte wähle mindestens ein Jahr aus.")
+        st.warning("Bitte wähle Jahre aus.")
         df = pd.DataFrame()
     else:
         df = df_raw[df_raw['Jahr'].isin(selected_years)].copy()
     
     if not df.empty:
-        # Deutsche Mappings
         days_de = {'Monday': 'Mo', 'Tuesday': 'Di', 'Wednesday': 'Mi', 'Thursday': 'Do', 'Friday': 'Fr', 'Saturday': 'Sa', 'Sunday': 'So'}
         months_de = {1:'Jan', 2:'Feb', 3:'Mär', 4:'Apr', 5:'Mai', 6: 'Jun', 7:'Jul', 8:'Aug', 9:'Sep', 10:'Okt', 11:'Nov', 12:'Dez'}
         
@@ -107,22 +105,26 @@ if not df_raw.empty:
         df['Monat_Name'] = df['event_date'].dt.month.map(months_de)
         df = df.sort_values(by='event_date')
 
-        # --- A. ANALYSE ---
+        # --- A. ANALYSE (Erzwungenes 2er Layout) ---
         st.subheader("Analyse & Prognose")
-        m1, m2 = st.columns(2)
-        m1.metric("Gesamt", len(df))
+        
+        row1_col1, row1_col2 = st.columns(2)
+        row1_col1.metric("Gesamt", len(df))
+        
         df['Abstand'] = df['event_date'].diff().dt.days
         
         if len(df) >= 2:
             avg_days = df['Abstand'].mean()
             last_date = df['event_date'].iloc[-1]
             next_date = last_date + timedelta(days=avg_days)
-            m2.metric("Ø Abstand", f"{avg_days:.1f} d")
-            m3, m4 = st.columns(2)
-            m3.metric("Zuletzt am", last_date.strftime("%d.%m."))
-            m4.metric("Nächste ca.", next_date.strftime("%d.%m."))
+            
+            row1_col2.metric("Ø Abstand", f"{avg_days:.1f} d")
+            
+            row2_col1, row2_col2 = st.columns(2)
+            row2_col1.metric("Zuletzt", last_date.strftime("%d.%m."))
+            row2_col2.metric("Nächste ca.", next_date.strftime("%d.%m."))
         else:
-            m2.info("Ab 2 Einträgen")
+            row1_col2.info("Ab 2 Einträgen")
 
         # --- B. DIAGRAMME ---
         st.divider()
@@ -131,42 +133,35 @@ if not df_raw.empty:
         def create_bar_chart(data, x_col, y_col, is_year_axis=False):
             fig = px.bar(data, x=x_col, y=y_col, text=y_col)
             max_val = data[y_col].max() if not data.empty else 10
-            y_range = max_val * 1.25 
-            
-            fig.update_traces(marker_color=warm_gray, textposition='outside', textfont_size=12)
+            y_range = max_val * 1.3
+            fig.update_traces(marker_color=warm_gray, textposition='outside', textfont_size=11)
             fig.update_layout(
                 xaxis_title="", yaxis_title="", 
                 yaxis=dict(range=[0, y_range], showgrid=False, showticklabels=False),
                 xaxis=dict(type='category' if is_year_axis else None, showgrid=False),
-                margin=dict(l=10, r=10, t=30, b=10),
-                height=300,
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)'
+                margin=dict(l=10, r=10, t=30, b=10), height=250,
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
             )
             return fig
 
-        # 1. Häufigkeit nach Jahr
         st.markdown("### Häufigkeit nach Jahr")
         y_counts = df['Jahr'].value_counts().sort_index().reset_index()
         y_counts.columns = ['Jahr', 'Anzahl']
-        st.plotly_chart(create_bar_chart(y_counts, 'Jahr', 'Anzahl', is_year_axis=True), use_container_width=True, config={'displayModeBar': False})
+        st.plotly_chart(create_bar_chart(y_counts, 'Jahr', 'Anzahl', True), use_container_width=True, config={'displayModeBar': False})
 
-        # 2. Durchschnittlicher Abstand nach Jahr
         st.markdown("### Ø Abstand nach Jahr (Tage)")
         yearly_avg = df.groupby('Jahr')['Abstand'].mean().reset_index()
         yearly_avg.columns = ['Jahr', 'Abstand']
         yearly_avg['Abstand'] = yearly_avg['Abstand'].round(1)
         if not yearly_avg['Abstand'].dropna().empty:
-            st.plotly_chart(create_bar_chart(yearly_avg, 'Jahr', 'Abstand', is_year_axis=True), use_container_width=True, config={'displayModeBar': False})
+            st.plotly_chart(create_bar_chart(yearly_avg, 'Jahr', 'Abstand', True), use_container_width=True, config={'displayModeBar': False})
 
-        # 3. Häufigkeit nach Wochentag
         st.markdown("### Häufigkeit nach Wochentag")
         w_order = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
         wd_counts = df['Wochentag'].value_counts().reindex(w_order).fillna(0).reset_index()
         wd_counts.columns = ['Wochentag', 'Anzahl']
         st.plotly_chart(create_bar_chart(wd_counts, 'Wochentag', 'Anzahl'), use_container_width=True, config={'displayModeBar': False})
 
-        # --- C. HEATMAP ---
         st.markdown("### Heatmap (Muster)")
         heatmap_data = pd.crosstab(df['Wochentag'], df['Monat_Name'])
         m_order = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
