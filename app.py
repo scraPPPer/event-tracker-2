@@ -7,7 +7,7 @@ from datetime import timedelta
 # --- SEITE KONFIGURIEREN ---
 st.set_page_config(page_title="Event-Tracker", layout="centered")
 
-# --- KONFIGURATION ---
+# --- KONFIGURATION (SECRETS) ---
 try:
     SUPABASE_URL = st.secrets["supabase_url"]
     SUPABASE_KEY = st.secrets["supabase_key"]
@@ -59,7 +59,6 @@ if not df_raw.empty:
     st.subheader("🗓️ Zeitraum filtern")
     if min_year == max_year:
         selected_years = (min_year, max_year)
-        st.info(f"Daten für {min_year} vorhanden.")
     else:
         selected_years = st.slider("Jahre wählen:", min_year, max_year, (min_year, max_year))
 
@@ -87,11 +86,10 @@ if not df_raw.empty:
         c2.metric("Zuletzt", last_date.strftime("%d.%m."))
         c3.metric("Nächste", next_date.strftime("%d.%m."))
     else:
-        st.warning("Mehr Daten für Prognose nötig.")
+        st.warning("Mehr Daten nötig.")
 
-    # --- B. DIAGRAMME (Jahre & Wochentage) ---
+    # --- B. DIAGRAMME ---
     st.divider()
-    
     st.markdown("### 📊 Häufigkeit nach Jahr")
     year_counts = df['Jahr'].value_counts().sort_index()
     st.bar_chart(year_counts, color="#FF4B4B")
@@ -101,20 +99,28 @@ if not df_raw.empty:
     weekday_counts = df['Wochentag'].value_counts().reindex(w_order).fillna(0)
     st.bar_chart(weekday_counts, color="#2E66FF")
 
-    # --- C. HEATMAP (REPARIERT) ---
+    # --- C. HEATMAP (REPARIERT & SICHER) ---
     st.markdown("### 🌡️ Heatmap (Muster)")
-    # Wichtig: Hier stand vorher der Fehler!
-    heatmap_data = pd.crosstab(df['Wochentag'], df['Monat_Name'])
     
-    # Sortierung sicherstellen
-    m_order = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
-    heatmap_data = heatmap_data.reindex(index=[t for t in w_order if t in heatmap_data.index], 
-                                       columns=[m for m in m_order if m in heatmap_data.columns])
-    
-    st.dataframe(
-        heatmap_data.style.background_gradient(cmap="Reds", axis=None).format("{:.0f}"),
-        use_container_width=True
-    )
+    if not df.empty:
+        # Pivot-Tabelle erstellen
+        heatmap_data = pd.crosstab(df['Wochentag'], df['Monat_Name'])
+        
+        # Sortier-Listen
+        m_order = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
+        
+        # Reindexierung (Nur Spalten/Zeilen nehmen, die wirklich existieren)
+        existing_w = [t for t in w_order if t in heatmap_data.index]
+        existing_m = [m for m in m_order if m in heatmap_data.columns]
+        
+        if existing_w and existing_m:
+            heatmap_display = heatmap_data.reindex(index=existing_w, columns=existing_m).fillna(0)
+            st.dataframe(
+                heatmap_display.style.background_gradient(cmap="Reds", axis=None).format("{:.0f}"),
+                use_container_width=True
+            )
+        else:
+            st.info("Nicht genügend Daten für eine Heatmap-Ansicht.")
 
     # --- D. TABELLE ---
     with st.expander("📄 Alle Einträge"):
