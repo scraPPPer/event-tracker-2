@@ -7,7 +7,7 @@ from datetime import timedelta
 # --- SEITE KONFIGURIEREN ---
 st.set_page_config(page_title="Event-Tracker", layout="centered")
 
-# --- KONFIGURATION (SECRETS) ---
+# --- KONFIGURATION ---
 try:
     SUPABASE_URL = st.secrets["supabase_url"]
     SUPABASE_KEY = st.secrets["supabase_key"]
@@ -33,7 +33,7 @@ def save_entry(name, date_obj, notes):
 st.title("☁️ scraPPPers Tracker")
 
 # 1. EINGABE
-with st.expander("➕ Neues Ereignis eintragen", expanded=False):
+with st.expander("➕ Neues Ereignis eintragen"):
     name = st.text_input("Was ist passiert?", "Ereignis")
     date = st.date_input("Datum", datetime.date.today())
     notes = st.text_area("Details")
@@ -45,24 +45,41 @@ with st.expander("➕ Neues Ereignis eintragen", expanded=False):
 
 st.divider()
 
-# 2. DATEN ABFRAGEN
-df = run_query()
+# 2. DATEN ABFRAGEN & VORBEREITEN
+df_raw = run_query()
 
-if not df.empty:
-    # Datenaufbereitung
-    df['event_date'] = pd.to_datetime(df['event_date'])
-    df = df.sort_values(by='event_date')
+if not df_raw.empty:
+    df_raw['event_date'] = pd.to_datetime(df_raw['event_date'])
+    df_raw['Jahr'] = df_raw['event_date'].dt.year
     
+    # --- DER GLOBALE SCHIEBEREGLER ---
+    min_year = int(df_raw['Jahr'].min())
+    max_year = int(df_raw['Jahr'].max())
+    
+    st.subheader("🗓️ Zeitraum filtern")
+    if min_year == max_year:
+        selected_years = (min_year, max_year)
+        st.info(f"Daten nur für das Jahr {min_year} vorhanden.")
+    else:
+        selected_years = st.slider(
+            "Wähle den Zeitraum aus:",
+            min_value=min_year,
+            max_value=max_year,
+            value=(min_year, max_year)
+        )
+
+    # DATEN FILTERN (wirkt auf alles Folgende)
+    df = df_raw[(df_raw['Jahr'] >= selected_years[0]) & (df_raw['Jahr'] <= selected_years[1])].copy()
+    df = df.sort_values(by='event_date')
+
     # Mapping für Deutsch
     days_de = {'Monday': 'Mo', 'Tuesday': 'Di', 'Wednesday': 'Mi', 'Thursday': 'Do', 'Friday': 'Fr', 'Saturday': 'Sa', 'Sunday': 'So'}
     months_de = {1: 'Jan', 2: 'Feb', 3: 'Mär', 4: 'Apr', 5: 'Mai', 6: 'Jun', 7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Okt', 11: 'Nov', 12: 'Dez'}
     
     df['Wochentag'] = df['event_date'].dt.day_name().map(days_de)
-    df['Monat_Nr'] = df['event_date'].dt.month
-    df['Monat'] = df['Monat_Nr'].map(months_de)
-    df['Jahr'] = df['event_date'].dt.year
+    df['Monat'] = df['event_date'].dt.month.map(months_de)
 
-    # --- A. PROGNOSE ---
+    # --- A. PROGNOSE (gefiltert) ---
     st.subheader("🔮 Analyse & Prognose")
     if len(df) >= 2:
         df['diff'] = df['event_date'].diff().dt.days
@@ -74,35 +91,25 @@ if not df.empty:
         c1.metric("Ø Abstand", f"{avg_days:.1f} d")
         c2.metric("Zuletzt", last_date.strftime("%d.%m."))
         c3.metric("Nächste ca.", next_date.strftime("%d.%m."))
-    
-    # --- B. VERLAUF (LINIE STATT BÄLKCHEN) ---
-    st.markdown("### 📈 Zeitlicher Verlauf")
-    # Wir gruppieren nach Monat, um eine schöne Linie zu bekommen
-    timeline = df.set_index('event_date').resample('ME').size().reset_index()
-    timeline.columns = ['Datum', 'Anzahl']
-    
-    # Wir nutzen st.line_chart für eine saubere Linie
-    st.line_chart(timeline.set_index('Datum'), color="#FF4B4B")
+    else:
+        st.warning("Zu wenige Daten im gewählten Zeitraum für eine Prognose.")
+
+    # --- B. NEUE DIAGRAMME ---
+    st.divider()
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        st.markdown("### 📅 Nach Jahr")
+        year_counts = df['Jahr'].value_counts().sort_index()
+        st.bar_chart(year_counts, color="#FF4B4B")
+
+    with col_b:
+        st.markdown("### 🗓️ Nach Wochentag")
+        wochentage_order = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+        weekday_counts = df['Wochentag'].value_counts().reindex(wochentage_order).fillna(0)
+        st.bar_chart(weekday_counts, color="#2E66FF")
 
     # --- C. HEATMAP (MUSTER) ---
-    st.markdown("### 🗓️ Muster-Erkennung")
-    # Heatmap erstellen
+    st.markdown("### 🌡️ Heatmap (Wochentag vs. Monat)")
     heatmap_data = pd.crosstab(df['Wochentag'], df['Monat'])
-    
-    # Sortierung der Wochentage
-    wochentage_order = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
-    vorhandene_tage = [t for t in wochentage_order if t in heatmap_data.index]
-    heatmap_data = heatmap_data.reindex(vorhandene_tage)
-    
-    # Darstellung mit Style (Heatmap-Effekt)
-    st.dataframe(
-        heatmap_data.style.background_gradient(cmap="Reds", axis=None).format("{:.0f}"),
-        use_container_width=True
-    )
-
-    # --- D. TABELLE ---
-    with st.expander("📄 Alle Einträge"):
-        st.dataframe(df[['event_date', 'event_name', 'notes']].sort_values(by='event_date', ascending=False), use_container_width=True)
-
-else:
-    st.info("Noch keine Daten vorhanden. Trag oben dein erstes Ereignis ein!")
+    heatmap_data = heatmap
