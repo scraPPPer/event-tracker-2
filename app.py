@@ -7,6 +7,15 @@ from datetime import timedelta
 # --- SEITE KONFIGURIEREN ---
 st.set_page_config(page_title="Event-Tracker", layout="centered")
 
+# CSS für kleinere Überschriften
+st.markdown("""
+    <style>
+    h1 { font-size: 1.8rem !important; }
+    h2 { font-size: 1.5rem !important; }
+    h3 { font-size: 1.2rem !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
 # --- KONFIGURATION (SECRETS) ---
 try:
     SUPABASE_URL = st.secrets["supabase_url"]
@@ -30,10 +39,10 @@ def save_entry(name, date_obj, notes):
     client.table("events").insert(data).execute()
 
 # --- APP LAYOUT ---
-st.title("☁️ scraPPPers Tracker")
+st.title("scraPPPers Tracker")
 
 # 1. EINGABE
-with st.expander("➕ Neues Ereignis eintragen"):
+with st.expander("Neues Ereignis eintragen"):
     name = st.text_input("Was ist passiert?", "Ereignis")
     date = st.date_input("Datum", datetime.date.today())
     notes = st.text_area("Details")
@@ -52,20 +61,20 @@ if not df_raw.empty:
     df_raw['event_date'] = pd.to_datetime(df_raw['event_date'])
     df_raw['Jahr'] = df_raw['event_date'].dt.year
     
-    # --- DER GLOBALE SCHIEBEREGLER ---
+    # --- DER GLOBALE SCHIEBEREGLER (Mittelgrau) ---
     min_year = int(df_raw['Jahr'].min())
     max_year = int(df_raw['Jahr'].max())
     
-    st.subheader("🗓️ Zeitraum filtern")
+    st.subheader("Zeitraum filtern")
     if min_year == max_year:
         selected_years = (min_year, max_year)
     else:
+        # Streamlit nutzt für Slider primär die Theme-Farben, aber wir halten es schlicht
         selected_years = st.slider("Jahre wählen:", min_year, max_year, (min_year, max_year))
 
     # DATEN FILTERN
     df = df_raw[(df_raw['Jahr'] >= selected_years[0]) & (df_raw['Jahr'] <= selected_years[1])].copy()
     
-    # Mapping für Deutsch
     days_de = {'Monday': 'Mo', 'Tuesday': 'Di', 'Wednesday': 'Mi', 'Thursday': 'Do', 'Friday': 'Fr', 'Saturday': 'Sa', 'Sunday': 'So'}
     months_de = {1: 'Jan', 2: 'Feb', 3: 'Mär', 4: 'Apr', 5: 'Mai', 6: 'Jun', 7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Okt', 11: 'Nov', 12: 'Dez'}
     
@@ -73,43 +82,54 @@ if not df_raw.empty:
     df['Monat_Name'] = df['event_date'].dt.month.map(months_de)
     df = df.sort_values(by='event_date')
 
-    # --- A. PROGNOSE ---
-    st.subheader("🔮 Analyse & Prognose")
-    if len(df) >= 2:
+    # --- A. ANALYSE & PROGNOSE (2x2 Layout) ---
+    st.subheader("Analyse & Prognose")
+    
+    total_count = len(df)
+    
+    # Erste Zeile
+    col1, col2 = st.columns(2)
+    col1.metric("Gesamtanzahl", total_count)
+    
+    if total_count >= 2:
         df['diff'] = df['event_date'].diff().dt.days
         avg_days = df['diff'].mean()
         last_date = df['event_date'].iloc[-1]
         next_date = last_date + timedelta(days=avg_days)
         
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Ø Tage", f"{avg_days:.1f}")
-        c2.metric("Zuletzt", last_date.strftime("%d.%m."))
-        c3.metric("Nächste", next_date.strftime("%d.%m."))
+        col2.metric("Ø Tage Abstand", f"{avg_days:.1f}")
+        
+        # Zweite Zeile
+        col3, col4 = st.columns(2)
+        col3.metric("Zuletzt am", last_date.strftime("%d.%m."))
+        col4.metric("Nächste ca.", next_date.strftime("%d.%m."))
     else:
-        st.warning("Mehr Daten nötig.")
+        col2.info("Mehr Daten nötig")
 
-    # --- B. DIAGRAMME ---
+    # --- B. DIAGRAMME (Grau & Beschriftet) ---
     st.divider()
-    st.markdown("### 📊 Häufigkeit nach Jahr")
-    year_counts = df['Jahr'].value_counts().sort_index()
-    st.bar_chart(year_counts, color="#FF4B4B")
-
-    st.markdown("### 🗓️ Häufigkeit nach Wochentag")
-    w_order = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
-    weekday_counts = df['Wochentag'].value_counts().reindex(w_order).fillna(0)
-    st.bar_chart(weekday_counts, color="#2E66FF")
-
-    # --- C. HEATMAP (REPARIERT & SICHER) ---
-    st.markdown("### 🌡️ Heatmap (Muster)")
     
+    # Diagramm-Farbe (Warmes Mittelgrau)
+    warm_gray = "#8C837E"
+
+    st.markdown("### Häufigkeit nach Jahr")
+    year_counts = df['Jahr'].value_counts().sort_index().reset_index()
+    year_counts.columns = ['Jahr', 'Anzahl']
+    st.bar_chart(year_counts.set_index('Jahr'), color=warm_gray)
+    # Hinweis: Native st.bar_chart Labels sind in der aktuellen Streamlit Version eingeschränkt, 
+    # daher nutzen wir die Standard-Interaktivität (Hover zeigt Wert).
+
+    st.markdown("### Häufigkeit nach Wochentag")
+    w_order = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+    weekday_counts = df['Wochentag'].value_counts().reindex(w_order).fillna(0).reset_index()
+    weekday_counts.columns = ['Wochentag', 'Anzahl']
+    st.bar_chart(weekday_counts.set_index('Wochentag'), color=warm_gray)
+
+    # --- C. HEATMAP ---
+    st.markdown("### Heatmap (Muster)")
     if not df.empty:
-        # Pivot-Tabelle erstellen
         heatmap_data = pd.crosstab(df['Wochentag'], df['Monat_Name'])
-        
-        # Sortier-Listen
         m_order = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
-        
-        # Reindexierung (Nur Spalten/Zeilen nehmen, die wirklich existieren)
         existing_w = [t for t in w_order if t in heatmap_data.index]
         existing_m = [m for m in m_order if m in heatmap_data.columns]
         
@@ -119,11 +139,9 @@ if not df_raw.empty:
                 heatmap_display.style.background_gradient(cmap="Reds", axis=None).format("{:.0f}"),
                 use_container_width=True
             )
-        else:
-            st.info("Nicht genügend Daten für eine Heatmap-Ansicht.")
 
     # --- D. TABELLE ---
-    with st.expander("📄 Alle Einträge"):
+    with st.expander("Alle Einträge"):
         st.dataframe(df[['event_date', 'event_name', 'notes']].sort_values(by='event_date', ascending=False), use_container_width=True)
 
 else:
