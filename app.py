@@ -16,6 +16,8 @@ st.markdown("""
     h3 { font-size: 1.0rem !important; color: #666; }
     [data-testid="stMetricValue"] { font-size: 1.4rem !important; }
     .stMultiSelect { margin-bottom: 0.5rem !important; }
+    /* Buttons kompakter machen */
+    .stButton button { margin-bottom: 0px !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -61,24 +63,31 @@ df_raw = run_query()
 if not df_raw.empty:
     df_raw['event_date'] = pd.to_datetime(df_raw['event_date'])
     df_raw['Jahr'] = df_raw['event_date'].dt.year
-    
-    # --- JAHRES-FILTER MIT "ALLE AUSWÄHLEN" ---
     all_years = sorted(df_raw['Jahr'].unique().tolist())
-    
+    current_year = datetime.date.today().year
+
     st.subheader("Zeitraum wählen")
     
-    # Session State initialisieren für die Auswahl
+    # 1. Session State für die Auswahl initialisieren
     if "selected_years" not in st.session_state:
-        # Standardmäßig die letzten 2 Jahre oder alles
-        current_year = datetime.date.today().year
         st.session_state.selected_years = [y for y in all_years if y >= (current_year - 2)] or all_years
 
-    # Der Button für "Alle auswählen"
-    if st.button("Alle Jahre auswählen", use_container_width=True):
+    # 2. Buttons für Schnellauswahl
+    col1, col2 = st.columns(2)
+    
+    if col1.button("Alle Jahre", use_container_width=True):
         st.session_state.selected_years = all_years
+        st.rerun()
 
+    if col2.button("Letzte 3 Jahre", use_container_width=True):
+        # Berechnet die letzten 3 Jahre inkl. dem aktuellen (z.B. 2024, 2025, 2026)
+        three_year_range = [current_year, current_year - 1, current_year - 2]
+        st.session_state.selected_years = [y for y in all_years if y in three_year_range]
+        st.rerun()
+
+    # 3. Das Multiselect-Feld (verknüpft mit dem State)
     selected_years = st.multiselect(
-        "Jahre auswählen:", 
+        "Jahre manuell anpassen:", 
         options=all_years, 
         key="selected_years"
     )
