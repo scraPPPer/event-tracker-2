@@ -7,7 +7,7 @@ from datetime import timedelta
 # --- SEITE KONFIGURIEREN ---
 st.set_page_config(page_title="Event-Tracker", layout="centered")
 
-# CSS Fixes
+# CSS Fixes für Design und Mobile
 st.markdown("""
     <style>
     h1 { font-size: 1.5rem !important; margin-bottom: 0.5rem; }
@@ -66,7 +66,8 @@ if not df_raw.empty:
     all_years = sorted(df_raw['Jahr'].unique().tolist())
     current_year = datetime.date.today().year
     default_years = [y for y in all_years if y >= (current_year - 2)]
-    if not default_years: default_years = all_years
+    if not default_years: 
+        default_years = all_years
 
     st.subheader("Zeitraum wählen")
     selected_years = st.multiselect("Jahre auswählen:", options=all_years, default=default_years)
@@ -78,7 +79,7 @@ if not df_raw.empty:
         df = df_raw[df_raw['Jahr'].isin(selected_years)].copy()
     
     if not df.empty:
-        # Deutsche Mappings kompakt
+        # Deutsche Mappings
         days_de = {'Monday': 'Mo', 'Tuesday': 'Di', 'Wednesday': 'Mi', 'Thursday': 'Do', 'Friday': 'Fr', 'Saturday': 'Sa', 'Sunday': 'So'}
         months_de = {1:'Jan', 2:'Feb', 3:'Mär', 4:'Apr', 5:'Mai', 6:'Jun', 7:'Jul', 8:'Aug', 9:'Sep', 10:'Okt', 11:'Nov', 12:'Dez'}
         
@@ -86,7 +87,7 @@ if not df_raw.empty:
         df['Monat_Name'] = df['event_date'].dt.month.map(months_de)
         df = df.sort_values(by='event_date')
 
-        # --- A. ANALYSE ---
+        # --- A. ANALYSE & PROGNOSE ---
         st.subheader("Analyse & Prognose")
         m1, m2 = st.columns(2)
         m1.metric("Gesamt", len(df))
@@ -133,12 +134,4 @@ if not df_raw.empty:
         # --- C. HEATMAP ---
         st.markdown("### Heatmap (Muster)")
         heatmap_data = pd.crosstab(df['Wochentag'], df['Monat_Name'])
-        m_order = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
-        e_w = [t for t in w_order if t in heatmap_data.index]
-        e_m = [m for m in m_order if m in heatmap_data.columns]
-        
-        if e_w and e_m:
-            h_disp = heatmap_data.reindex(index=e_w, columns=e_m).fillna(0)
-            st.dataframe(h_disp.style.background_gradient(cmap="Reds", axis=None).format("{:.0f}"), use_container_width=True)
-
-        with st.expander("Alle Einträge"):
+        m_order = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'De
