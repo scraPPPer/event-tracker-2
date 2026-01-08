@@ -15,6 +15,7 @@ st.markdown("""
     h2 { font-size: 1.2rem !important; margin-top: 1rem; }
     h3 { font-size: 1.0rem !important; color: #666; }
     [data-testid="stMetricValue"] { font-size: 1.4rem !important; }
+    .stMultiSelect { margin-bottom: 0.5rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -61,13 +62,26 @@ if not df_raw.empty:
     df_raw['event_date'] = pd.to_datetime(df_raw['event_date'])
     df_raw['Jahr'] = df_raw['event_date'].dt.year
     
+    # --- JAHRES-FILTER MIT "ALLE AUSWÄHLEN" ---
     all_years = sorted(df_raw['Jahr'].unique().tolist())
-    current_year = datetime.date.today().year
-    default_years = [y for y in all_years if y >= (current_year - 2)]
-    if not default_years: default_years = all_years
-
+    
     st.subheader("Zeitraum wählen")
-    selected_years = st.multiselect("Jahre auswählen:", options=all_years, default=default_years)
+    
+    # Session State initialisieren für die Auswahl
+    if "selected_years" not in st.session_state:
+        # Standardmäßig die letzten 2 Jahre oder alles
+        current_year = datetime.date.today().year
+        st.session_state.selected_years = [y for y in all_years if y >= (current_year - 2)] or all_years
+
+    # Der Button für "Alle auswählen"
+    if st.button("Alle Jahre auswählen", use_container_width=True):
+        st.session_state.selected_years = all_years
+
+    selected_years = st.multiselect(
+        "Jahre auswählen:", 
+        options=all_years, 
+        key="selected_years"
+    )
 
     if not selected_years:
         st.warning("Bitte wähle mindestens ein Jahr aus.")
@@ -76,6 +90,7 @@ if not df_raw.empty:
         df = df_raw[df_raw['Jahr'].isin(selected_years)].copy()
     
     if not df.empty:
+        # Deutsche Mappings
         days_de = {'Monday': 'Mo', 'Tuesday': 'Di', 'Wednesday': 'Mi', 'Thursday': 'Do', 'Friday': 'Fr', 'Saturday': 'Sa', 'Sunday': 'So'}
         months_de = {1:'Jan', 2:'Feb', 3:'Mär', 4:'Apr', 5:'Mai', 6: 'Jun', 7:'Jul', 8:'Aug', 9:'Sep', 10:'Okt', 11:'Nov', 12:'Dez'}
         
@@ -104,20 +119,12 @@ if not df_raw.empty:
         st.divider()
         warm_gray = "#8C837E"
 
-        # Hilfsfunktion für Plotly-Charts mit Fix für Achsen & Labels
         def create_bar_chart(data, x_col, y_col, is_year_axis=False):
             fig = px.bar(data, x=x_col, y=y_col, text=y_col)
-            
-            # Y-Achse Puffer berechnen, damit Labels oben nicht abgeschnitten werden
             max_val = data[y_col].max() if not data.empty else 10
-            y_range = max_val * 1.25 # 25% Platz oben drauf
+            y_range = max_val * 1.25 
             
-            fig.update_traces(
-                marker_color=warm_gray, 
-                textposition='outside',
-                textfont_size=12
-            )
-            
+            fig.update_traces(marker_color=warm_gray, textposition='outside', textfont_size=12)
             fig.update_layout(
                 xaxis_title="", yaxis_title="", 
                 yaxis=dict(range=[0, y_range], showgrid=False, showticklabels=False),
