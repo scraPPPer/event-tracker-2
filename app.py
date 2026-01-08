@@ -126,21 +126,22 @@ if not df_raw.empty:
             next_date_obj = last_date_obj + timedelta(days=avg_val)
             next_date_str = next_date_obj.strftime("%d.%m.")
             
-            # Abstand zum heutigen Tag berechnen (nur Datum ohne Zeit)
             today = datetime.datetime.now().date()
             last_date_only = last_date_obj.date()
             days_since = (today - last_date_only).days
             
             # Farblogik für "Seit letztem Mal"
-            status_class = "bg-green"
-            if days_since > 10: status_class = "bg-red"
-            elif days_since > 5: status_class = "bg-yellow"
+            status_since_class = "bg-green"
+            if days_since > 10: status_since_class = "bg-red"
+            elif days_since > 5: status_since_class = "bg-yellow"
 
-            # Logik für die "Tendenz" Kachel (Präzise Version)
+            # Logik für "Tendenz" Kachel
             if days_since > avg_val:
                 tendenz = "Überfällig"
+                tendenz_class = "bg-red"
             else:
                 tendenz = "Im Zeitplan"
+                tendenz_class = "bg-green"
 
             st.markdown(f"""
                 <div class="metric-container">
@@ -149,11 +150,11 @@ if not df_raw.empty:
                 </div>
                 <div class="metric-container">
                     <div class="metric-box"><div class="metric-label">Zuletzt</div><div class="metric-value">{last_date_str}</div></div>
-                    <div class="metric-box {status_class}"><div class="metric-label">Seit letztem Mal</div><div class="metric-value">{days_since} Tage</div></div>
+                    <div class="metric-box {status_since_class}"><div class="metric-label">Seit letztem Mal</div><div class="metric-value">{days_since} Tage</div></div>
                 </div>
                 <div class="metric-container">
                     <div class="metric-box"><div class="metric-label">Nächste ca.</div><div class="metric-value">{next_date_str}</div></div>
-                    <div class="metric-box"><div class="metric-label">Tendenz</div><div class="metric-value">{tendenz}</div></div>
+                    <div class="metric-box {tendenz_class}"><div class="metric-label">Tendenz</div><div class="metric-value">{tendenz}</div></div>
                 </div>
             """, unsafe_allow_html=True)
         else:
